@@ -15,10 +15,11 @@ from typing import Tuple
 import torch
 from torch import Tensor as T
 from torch import nn
-from transformers.modeling_bert import BertConfig, BertModel
-from transformers.optimization import AdamW
-from transformers.tokenization_bert import BertTokenizer
-from transformers.tokenization_roberta import RobertaTokenizer
+from transformers import BertConfig, BertModel
+from transformers import AdamW
+from transformers import BertTokenizer
+from transformers import RobertaTokenizer
+from transformers import LukeTokenizer, LukeModel
 
 from dpr.models.biencoder import BiEncoder
 from dpr.utils.data_utils import Tensorizer
@@ -194,6 +195,7 @@ class HFBertEncoder(BertModel):
                 input_ids=input_ids,
                 token_type_ids=token_type_ids,
                 attention_mask=attention_mask,
+                return_dict=False
             )
         else:
             hidden_states = None
@@ -201,6 +203,7 @@ class HFBertEncoder(BertModel):
                 input_ids=input_ids,
                 token_type_ids=token_type_ids,
                 attention_mask=attention_mask,
+                return_dict=False
             )
 
         if isinstance(representation_token_pos, int):
