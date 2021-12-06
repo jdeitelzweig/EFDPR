@@ -21,7 +21,7 @@ from dpr.data.biencoder_data import (
 
 logger = logging.getLogger(__name__)
 QASample = collections.namedtuple("QuerySample", ["query", "id", "answers"])
-EQASample = collections.namedtuple("EntityQuerySample", ["query", "id", "answers", "entities"])
+EQASample = collections.namedtuple("EntityQuerySample", ["query", "id", "answers", "entities", "entity_spans"])
 TableChunk = collections.namedtuple("TableChunk", ["text", "title", "table_id"])
 
 
@@ -121,11 +121,19 @@ class CsvQASrcEnt(CsvQASrc):
             for row in reader:
                 question = row[self.question_col]
                 answers = eval(row[self.answers_col])
-                entities = eval(row[self.entities_col])
+                entities_with_spans = eval(row[self.entities_col])
+                
+                entities = []
+                entity_spans = []
+
+                for entity in entities_with_spans:
+                    entities.append(entity[0])
+                    entity_spans.append((entity[1], entity[2]))
+
                 id = None
                 if self.id_col >= 0:
                     id = row[self.id_col]
-                data.append(EQASample(self._process_question(question), id, answers, entities))
+                data.append(EQASample(self._process_question(question), id, answers, entities, entity_spans))
         self.data = data
     
 
