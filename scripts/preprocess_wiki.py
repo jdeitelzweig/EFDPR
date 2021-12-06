@@ -2,6 +2,7 @@ import bz2
 import json
 import os
 import re
+import urllib.parse
 from tqdm import tqdm
 
 HOTPOT_DIR = "/n/fs/nlp-jacksond/datasets/hotpot-wiki/"
@@ -44,7 +45,8 @@ with open(OUTPUT_FILE, "w+") as out_file:
                     end = 0
                     while match:
                         end += match.start() + len(match.group(3))
-                        ent_mentions.append((end - len(match.group(3)), end))
+                        ent_name = urllib.parse.unquote(match.group(2))
+                        ent_mentions.append((ent_name, end - len(match.group(3)), end))
                         full_text = re.sub(HTML_TAG_REGEX, r'\3', full_text, 1)
                         match = re.search(HTML_TAG_REGEX, full_text[end:])
 
@@ -65,12 +67,12 @@ with open(OUTPUT_FILE, "w+") as out_file:
                         cur_mentions = []
 
                         # looping in this fashion should take care of entities on boundaries
-                        while cur_mention < len(ent_mentions) and ent_mentions[cur_mention][1] < end_ind:
-                            if start_ind <= ent_mentions[cur_mention][0]:
+                        while cur_mention < len(ent_mentions) and ent_mentions[cur_mention][2] < end_ind:
+                            if start_ind <= ent_mentions[cur_mention][1]:
                                 # Subtract i / 100 to account for spaces between passages
-                                new_start = ent_mentions[cur_mention][0] - start_ind - i // 100
-                                new_end = ent_mentions[cur_mention][1] - start_ind - i // 100
-                                cur_mentions.append((new_start, new_end))
+                                new_start = ent_mentions[cur_mention][1] - start_ind - i // 100
+                                new_end = ent_mentions[cur_mention][2] - start_ind - i // 100
+                                cur_mentions.append((ent_mentions[cur_mention][0], new_start, new_end))
                             cur_mention += 1
 
                         # Writing this way instead of with csv.writer because of weird behavior with quotechars

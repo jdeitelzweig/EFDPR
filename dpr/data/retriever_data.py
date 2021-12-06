@@ -21,6 +21,7 @@ from dpr.data.biencoder_data import (
 
 logger = logging.getLogger(__name__)
 QASample = collections.namedtuple("QuerySample", ["query", "id", "answers"])
+EQASample = collections.namedtuple("EntityQuerySample", ["query", "id", "answers", "entities"])
 TableChunk = collections.namedtuple("TableChunk", ["text", "title", "table_id"])
 
 
@@ -98,6 +99,35 @@ class CsvQASrc(QASrc):
                 data.append(QASample(self._process_question(question), id, answers))
         self.data = data
 
+class CsvQASrcEnt(CsvQASrc):
+    def __init__(
+        self,
+        file: str,
+        question_col: int = 0,
+        answers_col: int = 1,
+        id_col: int = -1,
+        entities_col: int = 2,
+        selector: DictConfig = None,
+        special_query_token: str = None,
+        query_special_suffix: str = None,
+    ):
+        super().__init__(file, question_col, answers_col, id_col, selector, special_query_token, query_special_suffix)
+        self.entities_col = entities_col
+
+    def load_data(self):
+        data = []
+        with open(self.file) as ifile:
+            reader = csv.reader(ifile, delimiter="\t")
+            for row in reader:
+                question = row[self.question_col]
+                answers = eval(row[self.answers_col])
+                entities = eval(row[self.entities_col])
+                id = None
+                if self.id_col >= 0:
+                    id = row[self.id_col]
+                data.append(EQASample(self._process_question(question), id, answers, entities))
+        self.data = data
+    
 
 class JsonlQASrc(QASrc):
     def __init__(
