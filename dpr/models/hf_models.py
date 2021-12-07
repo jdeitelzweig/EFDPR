@@ -10,16 +10,17 @@ Encoder model wrappers based on HuggingFace code
 """
 
 import logging
-from typing import Tuple
+from typing import Tuple, List
 
 import torch
 from torch import Tensor as T
 from torch import nn
 from transformers import BertConfig, BertModel
+from transformers import LukeConfig, LukeModel
 from transformers import AdamW
 from transformers import BertTokenizer
 from transformers import RobertaTokenizer
-from transformers import LukeTokenizer, LukeModel
+from transformers import LukeTokenizer
 
 from dpr.models.biencoder import BiEncoder
 from dpr.utils.data_utils import Tensorizer
@@ -61,6 +62,42 @@ def get_bert_biencoder_components(cfg, inference_only: bool = False, **kwargs):
     )
 
     tensorizer = get_bert_tensorizer(cfg)
+    return tensorizer, biencoder, optimizer
+
+
+def get_luke_biencoder_components(cfg, inference_only: bool = False, **kwargs):
+    dropout = cfg.encoder.dropout if hasattr(cfg.encoder, "dropout") else 0.0
+    question_encoder = HFLukeEncoder.init_encoder(
+        cfg.encoder.pretrained_model_cfg,
+        projection_dim=cfg.encoder.projection_dim,
+        dropout=dropout,
+        pretrained=cfg.encoder.pretrained,
+        **kwargs
+    )
+    ctx_encoder = HFLukeEncoder.init_encoder(
+        cfg.encoder.pretrained_model_cfg,
+        projection_dim=cfg.encoder.projection_dim,
+        dropout=dropout,
+        pretrained=cfg.encoder.pretrained,
+        **kwargs
+    )
+
+    fix_ctx_encoder = cfg.fix_ctx_encoder if hasattr(cfg, "fix_ctx_encoder") else False
+
+    biencoder = BiEncoder(question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
+
+    optimizer = (
+        get_optimizer(
+            biencoder,
+            learning_rate=cfg.train.learning_rate,
+            adam_eps=cfg.train.adam_eps,
+            weight_decay=cfg.train.weight_decay,
+        )
+        if not inference_only
+        else None
+    )
+
+    tensorizer = get_luke_tensorizer(cfg)
     return tensorizer, biencoder, optimizer
 
 
@@ -130,6 +167,10 @@ def get_roberta_tensorizer(args, tokenizer=None):
         tokenizer = get_roberta_tokenizer(args.pretrained_model_cfg, do_lower_case=args.do_lower_case)
     return RobertaTensorizer(tokenizer, args.sequence_length)
 
+def get_luke_tensorizer(args, tokenizer=None):
+    if not tokenizer:
+        tokenizer = get_luke_tokenizer(args.pretrained_model_cfg, do_lower_case=args.do_lower_case)
+    return LukeTensorizer(tokenizer, args.sequence_length)
 
 def get_optimizer(
     model: nn.Module,
@@ -161,6 +202,8 @@ def get_roberta_tokenizer(pretrained_cfg_name: str, do_lower_case: bool = True):
     # still uses HF code for tokenizer since they are the same
     return RobertaTokenizer.from_pretrained(pretrained_cfg_name, do_lower_case=do_lower_case)
 
+def get_luke_tokenizer(pretrained_cfg_name: str, do_lower_case: bool = True):
+    return LukeTokenizer.from_pretrained(pretrained_cfg_name, do_lower_case=do_lower_case)
 
 class HFBertEncoder(BertModel):
     def __init__(self, config, project_dim: int = 0):
@@ -223,6 +266,69 @@ class HFBertEncoder(BertModel):
         if self.encode_proj:
             return self.encode_proj.out_features
         return self.config.hidden_size
+
+class HFLukeEncoder(LukeModel):
+    def __init__(self, config, project_dim: int = 0):
+        LukeModel.__init__(self, config)
+        assert config.hidden_size > 0, "Encoder hidden_size can't be zero"
+        self.encode_proj = nn.Linear(config.hidden_size, project_dim) if project_dim != 0 else None
+        self.init_weights()
+
+    @classmethod
+    def init_encoder(
+        cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.1, pretrained: bool = True, **kwargs
+    ) -> LukeModel:
+        cfg = LukeConfig.from_pretrained(cfg_name if cfg_name else "studio-ousia/luke-base")
+        if dropout != 0:
+            cfg.attention_probs_dropout_prob = dropout
+            cfg.hidden_dropout_prob = dropout
+
+        if pretrained:
+            return cls.from_pretrained(cfg_name, config=cfg, project_dim=projection_dim, **kwargs)
+        else:
+            return HFLukeEncoder(cfg, project_dim=projection_dim)
+
+    def forward(
+        self,
+        input_ids: T,
+        token_type_ids: T,
+        attention_mask: T,
+        representation_token_pos=0,
+    ) -> Tuple[T, ...]:
+        if self.config.output_hidden_states:
+            sequence_output, pooled_output, hidden_states = super().forward(
+                input_ids=input_ids,
+                token_type_ids=token_type_ids,
+                attention_mask=attention_mask,
+                return_dict=False
+            )
+        else:
+            hidden_states = None
+            sequence_output, pooled_output = super().forward(
+                input_ids=input_ids,
+                token_type_ids=token_type_ids,
+                attention_mask=attention_mask,
+                return_dict=False
+            )
+
+        if isinstance(representation_token_pos, int):
+            pooled_output = sequence_output[:, representation_token_pos, :]
+        else:  # treat as a tensor
+            bsz = sequence_output.size(0)
+            assert representation_token_pos.size(0) == bsz, "query bsz={} while representation_token_pos bsz={}".format(
+                bsz, representation_token_pos.size(0)
+            )
+            pooled_output = torch.stack([sequence_output[i, representation_token_pos[i, 1], :] for i in range(bsz)])
+
+        if self.encode_proj:
+            pooled_output = self.encode_proj(pooled_output)
+        return sequence_output, pooled_output, hidden_states
+
+    def get_out_size(self):
+        if self.encode_proj:
+            return self.encode_proj.out_features
+        return self.config.hidden_size
+    
 
 
 class BertTensorizer(Tensorizer):
@@ -295,3 +401,49 @@ class BertTensorizer(Tensorizer):
 class RobertaTensorizer(BertTensorizer):
     def __init__(self, tokenizer, max_length: int, pad_to_max: bool = True):
         super(RobertaTensorizer, self).__init__(tokenizer, max_length, pad_to_max=pad_to_max)
+
+class LukeTensorizer(BertTensorizer):
+    def __init__(self, tokenizer, max_length: int, pad_to_max: bool = True):
+        super(LukeTensorizer, self).__init__(tokenizer, max_length, pad_to_max=pad_to_max)
+
+    def text_to_tensor(
+        self,
+        text: str,
+        title: str = None,
+        entities: List[str] = [],
+        entity_spans: List[Tuple[int, int]] = [],
+        add_special_tokens: bool = True,
+        apply_max_len: bool = True,
+    ):
+        text = text.strip()
+
+        if title:
+            token_ids = self.tokenizer.encode(
+                title,
+                text_pair=text,
+                entities_pair=entities,
+                entity_spans_pair=entity_spans,
+                add_special_tokens=add_special_tokens,
+                max_length=self.max_length if apply_max_len else 10000,
+                pad_to_max_length=False,
+                truncation=True,
+            )
+        else:
+            token_ids = self.tokenizer.encode(
+                text,
+                entities=entities,
+                entity_spans=entity_spans,
+                add_special_tokens=add_special_tokens,
+                max_length=self.max_length if apply_max_len else 10000,
+                pad_to_max_length=False,
+                truncation=True,
+            )
+
+        seq_len = self.max_length
+        if self.pad_to_max and len(token_ids) < seq_len:
+            token_ids = token_ids + [self.tokenizer.pad_token_id] * (seq_len - len(token_ids))
+        if len(token_ids) >= seq_len:
+            token_ids = token_ids[0:seq_len] if apply_max_len else token_ids
+            token_ids[-1] = self.tokenizer.sep_token_id
+
+        return torch.tensor(token_ids)
