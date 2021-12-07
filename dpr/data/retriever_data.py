@@ -12,6 +12,7 @@ from omegaconf import DictConfig
 
 from dpr.data.biencoder_data import (
     BiEncoderPassage,
+    EntBiEncoderPassage,
     normalize_passage,
     normalize_question,
     get_dpr_files,
@@ -99,7 +100,7 @@ class CsvQASrc(QASrc):
                 data.append(QASample(self._process_question(question), id, answers))
         self.data = data
 
-class CsvQASrcEnt(CsvQASrc):
+class CsvQAEntSrc(QASrc):
     def __init__(
         self,
         file: str,
@@ -111,7 +112,10 @@ class CsvQASrcEnt(CsvQASrc):
         special_query_token: str = None,
         query_special_suffix: str = None,
     ):
-        super().__init__(file, question_col, answers_col, id_col, selector, special_query_token, query_special_suffix)
+        super().__init__(file, selector, special_query_token, query_special_suffix)
+        self.question_col = question_col
+        self.answers_col = answers_col
+        self.id_col = id_col
         self.entities_col = entities_col
 
     def load_data(self):
@@ -291,6 +295,46 @@ class CsvCtxSrc(RetrieverData):
                 if self.normalize:
                     passage = normalize_passage(passage)
                 ctxs[sample_id] = BiEncoderPassage(passage, row[self.title_col])
+
+class CsvCtxEntSrc(RetrieverData):
+    def __init__(
+        self,
+        file: str,
+        id_col: int = 0,
+        text_col: int = 1,
+        title_col: int = 2,
+        ent_col: int = 3,
+        id_prefix: str = None,
+        normalize: bool = False,
+    ):
+        super().__init__(file)
+        self.text_col = text_col
+        self.title_col = title_col
+        self.id_col = id_col
+        self.id_prefix = id_prefix
+        self.normalize = normalize
+        self.ent_col = ent_col
+
+    def load_data_to(self, ctxs: Dict[object, BiEncoderPassage]):
+        super().load_data()
+        with open(self.file) as ifile:
+            reader = csv.reader(ifile, delimiter="\t")
+            for row in reader:
+                if row[self.id_col] == "id":
+                    continue
+                if self.id_prefix:
+                    sample_id = self.id_prefix + str(row[self.id_col])
+                else:
+                    sample_id = row[self.id_col]
+                passage = row[self.text_col]
+                entities = []
+                entity_spans = []
+                for ent in eval(row[self.ent_col]):
+                    entities.append(ent[0])
+                    entity_spans.append((ent[1], ent[2]))
+                if self.normalize:
+                    passage = normalize_passage(passage)
+                ctxs[sample_id] = EntBiEncoderPassage(passage, row[self.title_col], entities, entity_spans)
 
 
 class KiltCsvCtxSrc(CsvCtxSrc):

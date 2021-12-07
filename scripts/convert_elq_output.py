@@ -83,7 +83,7 @@ def main():
 
     dataset_path = f"/n/fs/nlp-jacksond/datasets/{'entity-questions' if using_eq else 'nq-open'}/"
     elq_output_name = f"/n/fs/nlp-jacksond/projects/BLINK/output/{'eq' if using_eq else 'nq'}_{data_source}/biencoder_outs.jsonl"
-    output_name = f"{OUTPUT_PATH}{'eq' if using_eq else 'nq'}_{data_source}.csv"
+    output_name = f"{OUTPUT_PATH}{'eq' if using_eq else 'nq'}-{data_source}-ent.csv"
     
     print(f"Loading data at {dataset_path}")
     data = load_data(dataset_path, data_source, using_eq)

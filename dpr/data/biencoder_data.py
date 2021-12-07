@@ -18,6 +18,7 @@ from dpr.utils.data_utils import read_data_from_json_files, Tensorizer
 
 logger = logging.getLogger(__name__)
 BiEncoderPassage = collections.namedtuple("BiEncoderPassage", ["text", "title"])
+EntBiEncoderPassage = collections.namedtuple("BiEncoderPassage", ["text", "title", "entities", "entity_spans"])
 
 
 class BiEncoderSample(object):

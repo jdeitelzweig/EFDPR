@@ -31,3 +31,15 @@ webq_test:
 curatedtrec_test:
   _target_: dpr.data.retriever_data.CsvQASrc
   file: data.retriever.qas.curatedtrec-test
+
+nq_test_ent:
+  _target_: dpr.data.retriever_data.CsvQAEntSrc
+  file: data.retriever.qas.nq-test-ent
+
+nq_train_ent:
+  _target_: dpr.data.retriever_data.CsvQAEntSrc
+  file: data.retriever.qas.nq-train-ent
+
+nq_dev_ent:
+  _target_: dpr.data.retriever_data.CsvQAEntSrc
+  file: data.retriever.qas.nq-dev-ent
