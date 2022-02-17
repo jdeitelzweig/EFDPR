@@ -17,12 +17,11 @@ from dpr.data.tables import Table
 from dpr.utils.data_utils import read_data_from_json_files, Tensorizer
 
 logger = logging.getLogger(__name__)
-BiEncoderPassage = collections.namedtuple("BiEncoderPassage", ["text", "title"])
-EntBiEncoderPassage = collections.namedtuple("BiEncoderPassage", ["text", "title", "entities", "entity_spans"])
-
+BiEncoderPassage = collections.namedtuple("BiEncoderPassage", ["text", "title", "entities", "entity_spans"])
+QuerySample = collections.namedtuple("QuerySample", ["text", "entities", "entity_spans"])
 
 class BiEncoderSample(object):
-    query: str
+    query: QuerySample
     positive_passages: List[BiEncoderPassage]
     negative_passages: List[BiEncoderPassage]
     hard_negative_passages: List[BiEncoderPassage]
@@ -99,13 +98,14 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, index) -> BiEncoderSample:
         raise NotImplementedError
 
-    def _process_query(self, query: str):
+    def _process_query(self, query_sample: QuerySample):
         # as of now, always normalize query
+        query = query_sample.text
         query = normalize_question(query)
         if self.query_special_suffix and not query.endswith(self.query_special_suffix):
             query += self.query_special_suffix
 
-        return query
+        return query_sample._replace(text=query)
 
 
 def get_dpr_files(source_name) -> List[str]:

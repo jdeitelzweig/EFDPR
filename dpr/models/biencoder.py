@@ -31,8 +31,12 @@ BiEncoderBatch = collections.namedtuple(
     [
         "question_ids",
         "question_segments",
+        "question_entity_ids",
+        "question_entity_segments",
         "context_ids",
         "ctx_segments",
+        "ctx_entity_ids",
+        "ctx_entity_segments",
         "is_positive",
         "hard_negatives",
         "encoder_type",
@@ -81,6 +85,9 @@ class BiEncoder(nn.Module):
         ids: T,
         segments: T,
         attn_mask: T,
+        entity_ids: T,
+        entity_segments: T,
+        entity_attn_mask: T,
         fix_encoder: bool = False,
         representation_token_pos=0,
     ) -> Tuple[T, T, T]:
@@ -94,6 +101,9 @@ class BiEncoder(nn.Module):
                         ids,
                         segments,
                         attn_mask,
+                        entity_ids,
+                        entity_segments,
+                        entity_attn_mask,
                         representation_token_pos=representation_token_pos,
                     )
 
@@ -105,6 +115,9 @@ class BiEncoder(nn.Module):
                     ids,
                     segments,
                     attn_mask,
+                    entity_ids,
+                    entity_segments,
+                    entity_attn_mask,
                     representation_token_pos=representation_token_pos,
                 )
 
@@ -115,9 +128,15 @@ class BiEncoder(nn.Module):
         question_ids: T,
         question_segments: T,
         question_attn_mask: T,
+        question_entity_ids: T,
+        question_entity_segments: T,
+        question_entity_attn_mask: T,
         context_ids: T,
         ctx_segments: T,
         ctx_attn_mask: T,
+        ctx_entity_ids: T,
+        ctx_entity_segments: T,
+        ctx_entity_attn_mask: T,
         encoder_type: str = None,
         representation_token_pos=0,
     ) -> Tuple[T, T]:
@@ -127,13 +146,23 @@ class BiEncoder(nn.Module):
             question_ids,
             question_segments,
             question_attn_mask,
+            question_entity_ids,
+            question_entity_segments,
+            question_entity_attn_mask,
             self.fix_q_encoder,
             representation_token_pos=representation_token_pos,
         )
 
         ctx_encoder = self.ctx_model if encoder_type is None or encoder_type == "ctx" else self.question_model
         _ctx_seq, ctx_pooled_out, _ctx_hidden = self.get_representation(
-            ctx_encoder, context_ids, ctx_segments, ctx_attn_mask, self.fix_ctx_encoder
+            ctx_encoder,
+            context_ids,
+            ctx_segments,
+            ctx_attn_mask,
+            ctx_entity_ids,
+            ctx_entity_segments,
+            ctx_entity_attn_mask,
+            self.fix_ctx_encoder
         )
 
         return q_pooled_out, ctx_pooled_out
@@ -199,6 +228,8 @@ class BiEncoder(nn.Module):
                 tensorizer.text_to_tensor(
                     ctx["text"],
                     title=ctx["title"] if (insert_title and "title" in ctx) else None,
+                    entities=ctx["entities"] if "entities" in ctx else None,
+                    entity_spans=ctx["entity_spans"] if "entity_spans" in ctx else None
                 )
                 for ctx in all_ctxs
             ]
@@ -294,7 +325,12 @@ class BiEncoder(nn.Module):
             current_ctxs_len = len(ctx_tensors)
 
             sample_ctxs_tensors = [
-                tensorizer.text_to_tensor(ctx.text, title=ctx.title if (insert_title and ctx.title) else None)
+                tensorizer.text_to_tensor(
+                    ctx.text, 
+                    title=ctx.title if (insert_title and ctx.title) else None,
+                    entities=ctx.entities if ctx.entities else None,
+                    entity_spans=ctx.entity_spans if ctx.entity_spans else None
+                )
                 for ctx in all_ctxs
             ]
 
@@ -318,7 +354,7 @@ class BiEncoder(nn.Module):
                 else:
                     question_tensors.append(tensorizer.text_to_tensor(" ".join([query_token, question])))
             else:
-                question_tensors.append(tensorizer.text_to_tensor(question))
+                question_tensors.append(tensorizer.text_to_tensor(question["text"], entities=question["entities"], entity_spans=question["entity_spans"]))
 
         ctxs_tensor = torch.cat([ctx.view(1, -1) for ctx in ctx_tensors], dim=0)
         questions_tensor = torch.cat([q.view(1, -1) for q in question_tensors], dim=0)

@@ -12,7 +12,6 @@ from omegaconf import DictConfig
 
 from dpr.data.biencoder_data import (
     BiEncoderPassage,
-    EntBiEncoderPassage,
     normalize_passage,
     normalize_question,
     get_dpr_files,
@@ -334,7 +333,7 @@ class CsvCtxEntSrc(RetrieverData):
                     entity_spans.append((ent[1], ent[2]))
                 if self.normalize:
                     passage = normalize_passage(passage)
-                ctxs[sample_id] = EntBiEncoderPassage(passage, row[self.title_col], entities, entity_spans)
+                ctxs[sample_id] = BiEncoderPassage(passage, row[self.title_col], entities, entity_spans)
 
 
 class KiltCsvCtxSrc(CsvCtxSrc):

@@ -293,6 +293,9 @@ class HFLukeEncoder(LukeModel):
         input_ids: T,
         token_type_ids: T,
         attention_mask: T,
+        entity_ids: T,
+        entity_token_type_ids: T,
+        entity_attention_mask: T,
         representation_token_pos=0,
     ) -> Tuple[T, ...]:
         if self.config.output_hidden_states:
@@ -300,6 +303,9 @@ class HFLukeEncoder(LukeModel):
                 input_ids=input_ids,
                 token_type_ids=token_type_ids,
                 attention_mask=attention_mask,
+                entity_ids=entity_ids,
+                entity_token_type_ids=entity_token_type_ids,
+                entity_attention_mask=entity_attention_mask,
                 return_dict=False
             )
         else:
@@ -308,6 +314,9 @@ class HFLukeEncoder(LukeModel):
                 input_ids=input_ids,
                 token_type_ids=token_type_ids,
                 attention_mask=attention_mask,
+                entity_ids=entity_ids,
+                entity_token_type_ids=entity_token_type_ids,
+                entity_attention_mask=entity_attention_mask,
                 return_dict=False
             )
 
@@ -417,6 +426,7 @@ class LukeTensorizer(BertTensorizer):
     ):
         text = text.strip()
 
+        # TODO: Figure out how to get entity attention mask
         if title:
             token_ids = self.tokenizer.encode(
                 title,

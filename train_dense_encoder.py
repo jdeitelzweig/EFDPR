@@ -690,6 +690,7 @@ def _do_biencoder_fwd_pass(
         model_out = model(
             input.question_ids,
             input.question_segments,
+            # TODO: add entities
             q_attn_mask,
             input.context_ids,
             input.ctx_segments,
